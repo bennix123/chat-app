@@ -1,0 +1,158 @@
+{% extends 'base.html' %} 
+{% block content %}
+<div class="message-box">
+  <h2>Chat Room: {{code}}</h2>
+  <div class="messages" id="messages"></div>
+  <div class="attached_file" id="attached_file">
+    <label for="file-input" class="file-label">
+      <span class="icon">&#128206;</span> Attach File From here
+    </label>
+    <input type="file" id="file-input" style="display: none" onchange="handleFileChange(this)">
+    <span id="file-input-label">No File Attached</span>
+  </div>
+  <div class="inputs">
+    <input
+      type="text"
+      rows="3"
+      placeholder="Message"
+      name="message"
+      id="message"
+    />
+    <button type="button" name="send" id="send-btn" onClick="sendMessage()">
+      Send
+    </button>
+    <div></div>
+    <!-- Add a "Leave" button -->
+    <button type="button" name="leave" id="leave-btn" style="color: red;" onClick="leaveMeeting()">
+      Leave
+    </button>
+  </div>
+</div>
+<script type="text/javascript">
+  var socketio = io();
+  let attachedFile;  
+  const messages = document.getElementById("messages");
+
+  const createMessage = (name, content, isFile = false) => {
+
+    console.log(content);
+    const div = document.createElement("div");
+    div.className = "text";
+
+    const spanName = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.appendChild(document.createTextNode(name));
+    spanName.appendChild(strong);
+
+    const spanContent = document.createElement("span");
+    if (isFile) {
+        // Display the file as a download link
+        const fileContent = document.createElement("span");
+        fileContent.innerHTML = content.replace(/"/g, ''); // Remove double quotes
+        spanContent.appendChild(fileContent);
+    } else {
+        // Display regular text content
+        spanContent.appendChild(document.createTextNode(content.replace(/"/g, ''))); // Remove double quotes
+    }
+
+    const spanTime = document.createElement("span");
+    spanTime.className = "muted";
+    spanTime.appendChild(document.createTextNode(new Date().toLocaleString()));
+
+    div.appendChild(spanName);
+    div.appendChild(spanContent);
+    div.appendChild(spanTime);
+
+    messages.appendChild(div);
+  };
+
+  socketio.on("message", (data) => {
+
+    if(data.message!==''){
+    createMessage(data.name, data.message);
+    }
+    if (data.fileLink) {
+      createMessage(data.name, data.fileLink, true);
+    }
+  });
+
+  const sendMessage =async () => {
+    const message = document.getElementById("message");
+  
+    if (message.value == "" && !attachedFile)
+        return;
+        const file_link = await getFileLink();
+        // const file_link=getFileLink();
+      
+    // Emit the message along with the file link (if available)
+    // socketio.emit("message", { data: message.value });
+    socketio.emit("message",{data: message.value, fileLink: file_link });
+    // socketio.emit("message", { name: "You", message: message.value, fileLink: getFileLink() });
+    // Reset the message and attached file
+    message.value = "";
+    clearFileInput();
+  };
+
+  const leaveMeeting = () => {
+    const confirmLeave = window.confirm("Are you sure you want to leave the meeting?");
+    
+    if (confirmLeave) {
+        window.location.href = '/';
+    }
+};
+
+
+  const getFileLink = () => {
+  if (attachedFile) {
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = (event) => {
+        const fileContent = `<span class="download-icon" onclick="downloadFile('${event.target.result}')">&#x1F4E5;</span>`;
+        resolve(fileContent);
+      };
+      reader.onerror = (error) => {
+        reject(error);
+      };
+      reader.readAsDataURL(attachedFile);
+    });
+  }
+  return null;
+};
+  const handleFileChange = (input) => {
+    attachedFile = input.files[0];
+    if (attachedFile) {
+        if (attachedFile.size > 2 * 1024 * 1024) { // Check if file size is greater than 2 MB
+            alert("File size exceeds 2 MB. Please choose a smaller file.");
+            clearFileInput();
+        } else {
+            document.getElementById("file-input-label").innerText = `File Attached: ${attachedFile.name}`;
+        }
+    } else {
+        document.getElementById("file-input-label").innerText = "No File Attached";
+    }
+  };
+
+  const clearFileInput = () => {
+    document.getElementById("file-input").value = "";
+    document.getElementById("file-input-label").innerText = "No File Attached";
+    attachedFile = null;
+  };
+
+  const downloadFile = (fileUrl) => {
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = 'data_file';
+    link.click();
+  };
+</script>
+{% for msg in messages %}
+<script type="text/javascript">
+  {% if msg.fileLink %}
+    createMessage("{{ msg.name }}", "{{ msg.fileLink|e }}", true);
+  {% else %}
+    createMessage("{{ msg.name }}", "{{ msg.message|e }}");
+  {% endif %}
+</script>
+
+{% endfor %} 
+{% endblock %}
